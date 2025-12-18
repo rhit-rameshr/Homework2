@@ -1,7 +1,6 @@
 package DomainLayer;
 
 import java.util.ArrayList;
-import ChipType;
 
 public class Player {
 
