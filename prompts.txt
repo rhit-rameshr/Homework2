@@ -1,0 +1,54 @@
+Please create a java program following the design of the following PlantUML.
+
+enum ChipType{
+    RED
+    GREEN 
+    BLUE 
+    BLACK 
+    WHITE 
+}
+
+
+
+package presentationLayer{
+
+    class Main{
+        -board: Card[]
+        -startNewGame()
+        -updateBoard()
+        -nextTurn()
+        -saveGameState()
+        -checkIfGameOver()
+    }
+
+}
+
+package DomainLayer{
+
+    class Player{
+        -chips: ArrayList<ChipType>
+        -cards: ArrayList<Card>
+        +buyCard(card: Card): boolean
+        +takeSameChips(chip1: ChipType, chip2: ChipType): void
+        +takeDifferentChips(chip1: ChipType, chip2: ChipType, chip3: ChipType): void
+    }
+
+    class Card{
+    +cost: ArrayList<ChipType>
+    +pointValue: int
+    }  
+}
+
+package dataStorageLayer{
+
+    class DataLogger{
+        +fileName: String
+        +logData(players: Player[], availableCards: Card[])
+    }
+
+}
+
+Main -d-> DataLogger
+Main -d->"2" Player
+
+Player -d->"*" Card
