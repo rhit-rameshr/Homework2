@@ -23,6 +23,14 @@ public class Main extends JFrame {
     private JLabel turnIndicator;
 
     private DataLogger logger;
+    private enum ChipActionMode {
+        NONE,
+        TAKE_TWO_SAME,
+        TAKE_THREE_DIFFERENT
+    }
+
+    private ChipActionMode chipMode = ChipActionMode.NONE;
+    private ArrayList<ChipType> selectedChips = new ArrayList<>();
 
     public Main() {
         players = new Player[] { new Player(), new Player() };
@@ -102,6 +110,13 @@ public class Main extends JFrame {
 
         if (player.buyCard(card)) {
             board[row][col] = null;
+
+            if (isBoardEmpty()) {
+                updateUIState();
+                showGameOverDialog();
+                return;
+            }
+
             nextTurn();
         } else {
             JOptionPane.showMessageDialog(
@@ -146,11 +161,26 @@ public class Main extends JFrame {
 
         JPanel controlPanel = new JPanel();
 
+        JButton takeTwoSameBtn = new JButton("Take 2 Same Chips");
+        takeTwoSameBtn.addActionListener(e -> {
+            chipMode = ChipActionMode.TAKE_TWO_SAME;
+            selectedChips.clear();
+        });
+        controlPanel.add(takeTwoSameBtn);
+
+        JButton takeThreeDiffBtn = new JButton("Take 3 Different Chips");
+        takeThreeDiffBtn.addActionListener(e -> {
+            chipMode = ChipActionMode.TAKE_THREE_DIFFERENT;
+            selectedChips.clear();
+        });
+        controlPanel.add(takeThreeDiffBtn);
+
+        /* Individual chip buttons */
         for (ChipType chip : ChipType.values()) {
-            JButton chipButton = new JButton("Take " + chip);
-            chipButton.addActionListener(e -> takeChip(chip));
+            JButton chipButton = new JButton(chip.toString());
+            chipButton.addActionListener(e -> handleChipSelection(chip));
             controlPanel.add(chipButton);
-        }
+}
 
         JButton restartButton = new JButton("Restart Game");
         restartButton.addActionListener(e -> restartGame());
@@ -160,6 +190,104 @@ public class Main extends JFrame {
 
         setSize(1000, 600);
         setVisible(true);
+    }
+
+    private void endChipAction() {
+        chipMode = ChipActionMode.NONE;
+        selectedChips.clear();
+        nextTurn();
+    }
+    private void handleChipSelection(ChipType chip) {
+        if (chipMode == ChipActionMode.NONE) {
+            JOptionPane.showMessageDialog(
+                    this,
+                    "Choose a chip action first.",
+                    "No Action Selected",
+                    JOptionPane.WARNING_MESSAGE
+            );
+            return;
+        }
+
+        if (chipMode == ChipActionMode.TAKE_TWO_SAME) {
+            selectedChips.add(chip);
+            selectedChips.add(chip);
+
+            if (selectedChips.size() == 2) {
+                players[currentPlayer].takeSameChips(selectedChips.get(0), selectedChips.get(1));
+                endChipAction();
+            }
+
+        } else if (chipMode == ChipActionMode.TAKE_THREE_DIFFERENT) {
+            if (selectedChips.contains(chip)) {
+                JOptionPane.showMessageDialog(
+                        this,
+                        "Chips must be different.",
+                        "Invalid Selection",
+                        JOptionPane.WARNING_MESSAGE
+                );
+                return;
+            }
+
+            selectedChips.add(chip);
+
+            if (selectedChips.size() == 3) {
+                players[currentPlayer]
+                        .takeDifferentChips(
+                                selectedChips.get(0),
+                                selectedChips.get(1),
+                                selectedChips.get(2)
+                        );
+                endChipAction();
+            }
+        }
+    }   
+
+    private boolean isBoardEmpty() {
+        for (int r = 0; r < ROWS; r++) {
+            for (int c = 0; c < COLS; c++) {
+                if (board[r][c] != null) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    private int getWinner() {
+        int p1Points = calculatePoints(players[0]);
+        int p2Points = calculatePoints(players[1]);
+
+        if (p1Points > p2Points) return 0;
+        if (p2Points > p1Points) return 1;
+        return -1; // tie
+    }
+
+    private void showGameOverDialog() {
+        int winner = getWinner();
+        String message;
+
+        if (winner == -1) {
+            message = "The game is a tie!";
+        } else {
+            message = "Player " + (winner + 1) + " wins!";
+        }
+
+        int choice = JOptionPane.showOptionDialog(
+                this,
+                message,
+                "Game Over",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.INFORMATION_MESSAGE,
+                null,
+                new String[]{"Restart Game", "Exit"},
+                "Restart Game"
+        );
+
+        if (choice == JOptionPane.YES_OPTION) {
+            restartGame();
+        } else {
+            System.exit(0);
+        }
     }
 
     private void updateUIState() {
