@@ -37,7 +37,7 @@ package DomainLayer{
     }  
 }
 
-package dataStorageLayer{
+package DataStorageLayer{
 
     class DataLogger{
         +fileName: String

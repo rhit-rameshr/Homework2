@@ -1,4 +1,4 @@
-package dataStorageLayer;
+package DataStorageLayer;
 
 import DomainLayer.Card;
 import DomainLayer.Player;

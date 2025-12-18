@@ -1,3 +1,5 @@
+## Prompt 1
+
 Please create a java program following the design of the following PlantUML.
 
 enum ChipType{
@@ -52,3 +54,9 @@ Main -d-> DataLogger
 Main -d->"2" Player
 
 Player -d->"*" Card
+
+
+
+## Prompt 2
+
+Please add functionality to Main.java to display the game state as a 3x5 array of cards with 2 text boxes to show player1 and player2 chips and victory points. Also allow for taking chips and restarting the game.
