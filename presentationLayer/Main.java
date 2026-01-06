@@ -359,6 +359,7 @@ private ImageIcon getCardIcon(Card card) {
 
         boardPanel.revalidate();
         boardPanel.repaint();
+        logger.saveGame(new GameState(board, players, currentPlayer));
     }
 
 private JPanel createCardView(int row, int col) {
