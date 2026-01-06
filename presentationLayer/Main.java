@@ -477,6 +477,34 @@ private JPanel createCardView(int row, int col) {
                      .sum();
     }
 
+    private void updateLeaderboardUI() {
+        // For now, you don’t have player names in DomainLayer, so label them here:
+        String[] names = {"Player 1", "Player 2"};
+
+        int p0 = players[0].getVictoryPoints();
+        int p1 = players[1].getVictoryPoints();
+
+        StringBuilder sb = new StringBuilder();
+
+        // Sort by points (descending)
+        if (p0 > p1) {
+            sb.append("1) ").append(names[0]).append(" — ").append(p0).append(" VP\n");
+            sb.append("2) ").append(names[1]).append(" — ").append(p1).append(" VP\n");
+        } else if (p1 > p0) {
+            sb.append("1) ").append(names[1]).append(" — ").append(p1).append(" VP\n");
+            sb.append("2) ").append(names[0]).append(" — ").append(p0).append(" VP\n");
+        } else {
+            sb.append("1) ").append(names[0]).append(" — ").append(p0).append(" VP (tied)\n");
+            sb.append("1) ").append(names[1]).append(" — ").append(p1).append(" VP (tied)\n");
+        }
+
+        // Optional: show whose turn
+        sb.append("\nTurn: ").append(names[currentPlayer]);
+
+        leaderboardArea.setText(sb.toString());
+    }
+
+
     public static void main(String[] args) {
         SwingUtilities.invokeLater(Main::new);
     }
