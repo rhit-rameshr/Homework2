@@ -26,6 +26,12 @@ public class Main extends JFrame {
     private JTextArea player2Info;
     private JLabel turnIndicator;
 
+    private JTextArea leaderboardArea;
+    private JPanel leaderboardPanel;
+    private LeaderboardState leaderboard;
+
+
+
     private DataLogger logger;
     private enum ChipActionMode {
         NONE,
@@ -42,6 +48,8 @@ public class Main extends JFrame {
     public Main() {
         players = new Player[] { new Player(), new Player() };
         logger = new DataLogger();
+        leaderboard = logger.loadLeaderboard();
+
 
         GameState loaded = logger.loadGame();
         if (loaded != null) {
@@ -243,6 +251,16 @@ private ImageIcon getCardIcon(Card card) {
 
         setSize(1000, 600);
         setVisible(true);
+
+        leaderboardArea = new JTextArea();
+        leaderboardArea.setEditable(false);
+
+        leaderboardPanel = new JPanel(new BorderLayout());
+        leaderboardPanel.add(new JLabel("Leaderboard", SwingConstants.CENTER), BorderLayout.NORTH);
+        leaderboardPanel.add(new JScrollPane(leaderboardArea), BorderLayout.CENTER);
+
+        add(leaderboardPanel, BorderLayout.EAST);
+
     }
 
     private void endChipAction() {
@@ -314,9 +332,29 @@ private ImageIcon getCardIcon(Card card) {
         if (p2Points > p1Points) return 1;
         return -1; // tie
     }
+    private void recordGameResult() {
+        String[] names = {"Player 1", "Player 2"};
+
+        int winner = getWinner();
+        int p0 = players[0].getVictoryPoints();
+        int p1 = players[1].getVictoryPoints();
+
+
+        leaderboard.bestVP.put(names[0], Math.max(leaderboard.bestVP.getOrDefault(names[0], 0), p0));
+        leaderboard.bestVP.put(names[1], Math.max(leaderboard.bestVP.getOrDefault(names[1], 0), p1));
+
+        if (winner != -1) {
+            String wName = names[winner];
+            leaderboard.wins.put(wName, leaderboard.wins.getOrDefault(wName, 0) + 1);
+        }
+
+        logger.saveLeaderboard(leaderboard);
+    }
+
 
     private void showGameOverDialog() {
         int winner = getWinner();
+
         String message;
 
         if (winner == -1) {
@@ -355,12 +393,17 @@ private ImageIcon getCardIcon(Card card) {
         updatePlayerInfo(player1Info, players[0], "Player 1", currentPlayer == 0);
         updatePlayerInfo(player2Info, players[1], "Player 2", currentPlayer == 1);
 
+        updateLeaderboardUI();
+
+
         turnIndicator.setText("Current Turn: Player " + (currentPlayer + 1));
 
         boardPanel.revalidate();
         boardPanel.repaint();
         logger.saveGame(new GameState(board, players, currentPlayer));
     }
+
+
 
 private JPanel createCardView(int row, int col) {
     JPanel panel = new JPanel();

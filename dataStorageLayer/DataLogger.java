@@ -30,6 +30,29 @@ public class DataLogger {
         }
     }
 
+    private final String leaderboardFile = "leaderboard.dat";
+
+    public void saveLeaderboard(LeaderboardState lb) {
+        try (ObjectOutputStream out = new ObjectOutputStream(new FileOutputStream(leaderboardFile))) {
+            out.writeObject(lb);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public LeaderboardState loadLeaderboard() {
+        File f = new File(leaderboardFile);
+        if (!f.exists()) return new LeaderboardState();
+
+        try (ObjectInputStream in = new ObjectInputStream(new FileInputStream(leaderboardFile))) {
+            return (LeaderboardState) in.readObject();
+        } catch (IOException | ClassNotFoundException e) {
+            e.printStackTrace();
+            return new LeaderboardState();
+        }
+    }
+
+
     public void clearSavedGame() {
         new File(fileName).delete();
     }
