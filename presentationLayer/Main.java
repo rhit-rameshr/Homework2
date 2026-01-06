@@ -138,9 +138,11 @@ public class Main extends JFrame {
 
             if (isBoardEmpty()) {
                 updateUIState();
+                recordGameResult();
                 showGameOverDialog();
                 return;
             }
+
 
             nextTurn();
         } else {
@@ -478,31 +480,25 @@ private JPanel createCardView(int row, int col) {
     }
 
     private void updateLeaderboardUI() {
-        // For now, you don’t have player names in DomainLayer, so label them here:
         String[] names = {"Player 1", "Player 2"};
 
-        int p0 = players[0].getVictoryPoints();
-        int p1 = players[1].getVictoryPoints();
-
         StringBuilder sb = new StringBuilder();
+        sb.append("HISTORIC LEADERBOARD\n\n");
 
-        // Sort by points (descending)
-        if (p0 > p1) {
-            sb.append("1) ").append(names[0]).append(" — ").append(p0).append(" VP\n");
-            sb.append("2) ").append(names[1]).append(" — ").append(p1).append(" VP\n");
-        } else if (p1 > p0) {
-            sb.append("1) ").append(names[1]).append(" — ").append(p1).append(" VP\n");
-            sb.append("2) ").append(names[0]).append(" — ").append(p0).append(" VP\n");
-        } else {
-            sb.append("1) ").append(names[0]).append(" — ").append(p0).append(" VP (tied)\n");
-            sb.append("1) ").append(names[1]).append(" — ").append(p1).append(" VP (tied)\n");
+        for (String name : names) {
+            int wins = leaderboard.wins.getOrDefault(name, 0);
+            int best = leaderboard.bestVP.getOrDefault(name, 0);
+
+            sb.append(name)
+                    .append(" | Wins: ").append(wins)
+                    .append(" | Best VP: ").append(best)
+                    .append("\n");
         }
 
-        // Optional: show whose turn
-        sb.append("\nTurn: ").append(names[currentPlayer]);
-
+        sb.append("\nCurrent Turn: ").append(names[currentPlayer]);
         leaderboardArea.setText(sb.toString());
     }
+
 
 
     public static void main(String[] args) {
