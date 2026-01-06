@@ -1,12 +1,16 @@
 package presentationLayer;
 
 import DomainLayer.*;
-import DataStorageLayer.DataLogger;
+import DataStorageLayer.*;
 
+import javax.imageio.ImageIO;
 import javax.swing.*;
 import java.awt.*;
 import java.util.ArrayList;
 import java.util.EnumMap;
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
+import java.net.URL;
 
 public class Main extends JFrame {
 
@@ -32,9 +36,21 @@ public class Main extends JFrame {
     private ChipActionMode chipMode = ChipActionMode.NONE;
     private ArrayList<ChipType> selectedChips = new ArrayList<>();
 
+    private final java.util.Map<Integer, ImageIcon> cardImageCache = new java.util.HashMap<>();
+
+
     public Main() {
         players = new Player[] { new Player(), new Player() };
-        logger = new DataLogger("game_log.txt");
+        logger = new DataLogger();
+
+        GameState loaded = logger.loadGame();
+        if (loaded != null) {
+            board = loaded.board;
+            players = loaded.players;
+            currentPlayer = loaded.currentPlayerIndex;
+        } else {
+            startNewGame();
+        }
 
         startNewGame();
         setupUI();
@@ -79,6 +95,7 @@ public class Main extends JFrame {
     }
 
     private void startNewGame() {
+        logger.clearSavedGame();
         board = new Card[ROWS][COLS];
         currentPlayer = 0;
 
@@ -98,7 +115,7 @@ public class Main extends JFrame {
     }
 
     private void takeChip(ChipType chip) {
-        players[currentPlayer].takeSameChips(chip, chip);
+        players[currentPlayer].takeSameChips(chip);
         nextTurn();
     }
 
@@ -135,6 +152,42 @@ public class Main extends JFrame {
     }
 
     /* ================= UI ================= */
+private ImageIcon getCardIcon(Card card) {
+    int key = card.pointValue;
+
+    // Return cached icon if already loaded
+    if (cardImageCache.containsKey(key)) {
+        return cardImageCache.get(key);
+    }
+
+    try {
+        // Local image files (you can add more as needed)
+        String[] localFiles = {
+            "resources/img1.jpg",
+            "resources/img2.jpg",
+            "resources/img3.jpg"
+        };
+
+        // Map pointValue to an image deterministically
+        String path = localFiles[(key - 1) % localFiles.length];
+
+        // Load image from resources
+        BufferedImage img = ImageIO.read(getClass().getResource(path));
+
+        // Scale image to fit card
+        Image scaled = img.getScaledInstance(90, 70, Image.SCALE_SMOOTH);
+        ImageIcon icon = new ImageIcon(scaled);
+
+        // Cache and return
+        cardImageCache.put(key, icon);
+        return icon;
+
+    } catch (Exception e) {
+        e.printStackTrace();
+        return null; // fallback: no image
+    }
+}
+
 
     private void setupUI() {
         setTitle("Card Game");
@@ -180,7 +233,7 @@ public class Main extends JFrame {
             JButton chipButton = new JButton(chip.toString());
             chipButton.addActionListener(e -> handleChipSelection(chip));
             controlPanel.add(chipButton);
-}
+        }
 
         JButton restartButton = new JButton("Restart Game");
         restartButton.addActionListener(e -> restartGame());
@@ -197,6 +250,7 @@ public class Main extends JFrame {
         selectedChips.clear();
         nextTurn();
     }
+
     private void handleChipSelection(ChipType chip) {
         if (chipMode == ChipActionMode.NONE) {
             JOptionPane.showMessageDialog(
@@ -210,10 +264,9 @@ public class Main extends JFrame {
 
         if (chipMode == ChipActionMode.TAKE_TWO_SAME) {
             selectedChips.add(chip);
-            selectedChips.add(chip);
 
             if (selectedChips.size() == 2) {
-                players[currentPlayer].takeSameChips(selectedChips.get(0), selectedChips.get(1));
+                players[currentPlayer].takeSameChips(selectedChips.get(0));
                 endChipAction();
             }
 
@@ -306,35 +359,46 @@ public class Main extends JFrame {
 
         boardPanel.revalidate();
         boardPanel.repaint();
+        logger.saveGame(new GameState(board, players, currentPlayer));
     }
 
-    private JPanel createCardView(int row, int col) {
-        JPanel panel = new JPanel();
-        panel.setBorder(BorderFactory.createLineBorder(Color.BLACK));
-        panel.setLayout(new BorderLayout());
+private JPanel createCardView(int row, int col) {
+    JPanel panel = new JPanel();
+    panel.setBorder(BorderFactory.createLineBorder(Color.BLACK));
+    panel.setLayout(new BorderLayout());
 
-        Card card = board[row][col];
+    Card card = board[row][col];
 
-        if (card != null) {
-            JLabel points = new JLabel("Points: " + card.pointValue, SwingConstants.CENTER);
-            JLabel cost = new JLabel("Cost: " + card.cost, SwingConstants.CENTER);
+    if (card != null) {
+        JLabel imageLabel = new JLabel();
+        imageLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        imageLabel.setPreferredSize(new Dimension(90, 70));
+        imageLabel.setIcon(getCardIcon(card)); // use local image
 
-            panel.add(points, BorderLayout.NORTH);
-            panel.add(cost, BorderLayout.CENTER);
+        JLabel points = new JLabel("⭐ " + card.pointValue, SwingConstants.CENTER);
+        JLabel cost = new JLabel("Cost: " + card.cost, SwingConstants.CENTER);
 
-            panel.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-            panel.addMouseListener(new java.awt.event.MouseAdapter() {
-                @Override
-                public void mouseClicked(java.awt.event.MouseEvent e) {
-                    attemptBuyCard(row, col);
-                }
-            });
-        } else {
-            panel.add(new JLabel("Empty", SwingConstants.CENTER));
-        }
+        JPanel textPanel = new JPanel(new GridLayout(2, 1));
+        textPanel.add(points);
+        textPanel.add(cost);
 
-        return panel;
+        panel.add(imageLabel, BorderLayout.CENTER);
+        panel.add(textPanel, BorderLayout.SOUTH);
+
+        panel.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        panel.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent e) {
+                attemptBuyCard(row, col);
+            }
+        });
+
+    } else {
+        panel.add(new JLabel("Empty", SwingConstants.CENTER));
     }
+
+    return panel;
+}
 
     private void updatePlayerInfo(
             JTextArea area,
@@ -351,8 +415,10 @@ public class Main extends JFrame {
             chipCount.put(chip, 0);
         }
 
-        for (ChipType chip : player.getChips()) {
-            chipCount.put(chip, chipCount.get(chip) + 1);
+        EnumMap<ChipType, Integer> chips = player.getChips();
+
+        for (ChipType chip : ChipType.values()) {
+            chipCount.put(chip, chips.getOrDefault(chip, 0));
         }
 
         chipCount.forEach((k, v) ->
