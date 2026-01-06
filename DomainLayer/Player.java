@@ -1,71 +1,91 @@
 package DomainLayer;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.Objects;
 
-public class Player {
+public class Player implements Serializable {
 
-    private ArrayList<ChipType> chips;
+    private static final long serialVersionUID = 1L;
+
+    private EnumMap<ChipType, Integer> chips;
     private ArrayList<Card> cards;
 
     public Player() {
-        this.chips = new ArrayList<>();
-        this.cards = new ArrayList<>();
+        chips = new EnumMap<>(ChipType.class);
+        for (ChipType t : ChipType.values()) {
+            chips.put(t, 0);
+        }
+        cards = new ArrayList<>();
     }
 
+    /* =======================
+       CHIP ACTIONS
+       ======================= */
+
+    /**
+     * Take two chips of the same type.
+     */
+    public void takeSameChips(ChipType chip) {
+        Objects.requireNonNull(chip);
+        chips.put(chip, chips.get(chip) + 2);
+    }
+
+    /**
+     * Take three different chips.
+     * All three must be unique.
+     */
+    public void takeDifferentChips(ChipType c1, ChipType c2, ChipType c3) {
+        if (c1 == c2 || c1 == c3 || c2 == c3) {
+            throw new IllegalArgumentException("Chips must be different");
+        }
+
+        chips.put(c1, chips.get(c1) + 1);
+        chips.put(c2, chips.get(c2) + 1);
+        chips.put(c3, chips.get(c3) + 1);
+    }
+
+    /**
+     * Returns a COPY of the player's chips.
+     * Prevents UI from mutating internal state.
+     */
+    public EnumMap<ChipType, Integer> getChips() {
+        return new EnumMap<>(chips);
+    }
+
+    /* =======================
+       CARD ACTIONS
+       ======================= */
+
     public boolean buyCard(Card card) {
+        EnumMap<ChipType, Integer> costMap = new EnumMap<>(ChipType.class);
 
-        // Count player's chips
-        EnumMap<ChipType, Integer> chipCounts = new EnumMap<>(ChipType.class);
-        for (ChipType chip : ChipType.values()) {
-            chipCounts.put(chip, 0);
-        }
-        for (ChipType chip : chips) {
-            chipCounts.put(chip, chipCounts.get(chip) + 1);
+        for (ChipType t : card.cost) {
+            costMap.put(t, costMap.getOrDefault(t, 0) + 1);
         }
 
-        // Count required chips
-        EnumMap<ChipType, Integer> costCounts = new EnumMap<>(ChipType.class);
-        for (ChipType chip : ChipType.values()) {
-            costCounts.put(chip, 0);
-        }
-        for (ChipType chip : card.cost) {
-            costCounts.put(chip, costCounts.get(chip) + 1);
-        }
-
-        // Check availability
-        for (ChipType chip : ChipType.values()) {
-            if (chipCounts.get(chip) < costCounts.get(chip)) {
+        // Check affordability
+        for (ChipType t : costMap.keySet()) {
+            if (chips.get(t) < costMap.get(t)) {
                 return false;
             }
         }
 
-        // Deduct chips
-        for (ChipType chip : card.cost) {
-            chips.remove(chip);
+        // Pay cost
+        for (ChipType t : costMap.keySet()) {
+            chips.put(t, chips.get(t) - costMap.get(t));
         }
 
         cards.add(card);
         return true;
     }
 
-
-    public void takeSameChips(ChipType chip1, ChipType chip2) {
-        chips.add(chip1);
-        chips.add(chip2);
-    }
-
-    public void takeDifferentChips(ChipType chip1, ChipType chip2, ChipType chip3) {
-        chips.add(chip1);
-        chips.add(chip2);
-        chips.add(chip3);
+    public int getVictoryPoints() {
+        return cards.stream().mapToInt(c -> c.pointValue).sum();
     }
 
     public ArrayList<Card> getCards() {
-        return cards;
-    }
-
-    public ArrayList<ChipType> getChips() {
-        return chips;
+        return new ArrayList<>(cards); 
     }
 }

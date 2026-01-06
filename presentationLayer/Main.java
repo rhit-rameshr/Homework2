@@ -1,7 +1,7 @@
 package presentationLayer;
 
 import DomainLayer.*;
-import DataStorageLayer.DataLogger;
+import DataStorageLayer.*;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
@@ -41,7 +41,16 @@ public class Main extends JFrame {
 
     public Main() {
         players = new Player[] { new Player(), new Player() };
-        logger = new DataLogger("game_log.txt");
+        logger = new DataLogger();
+
+        GameState loaded = logger.loadGame();
+        if (loaded != null) {
+            board = loaded.board;
+            players = loaded.players;
+            currentPlayer = loaded.currentPlayerIndex;
+        } else {
+            startNewGame();
+        }
 
         startNewGame();
         setupUI();
@@ -86,6 +95,7 @@ public class Main extends JFrame {
     }
 
     private void startNewGame() {
+        logger.clearSavedGame();
         board = new Card[ROWS][COLS];
         currentPlayer = 0;
 
@@ -105,7 +115,7 @@ public class Main extends JFrame {
     }
 
     private void takeChip(ChipType chip) {
-        players[currentPlayer].takeSameChips(chip, chip);
+        players[currentPlayer].takeSameChips(chip);
         nextTurn();
     }
 
@@ -223,7 +233,7 @@ private ImageIcon getCardIcon(Card card) {
             JButton chipButton = new JButton(chip.toString());
             chipButton.addActionListener(e -> handleChipSelection(chip));
             controlPanel.add(chipButton);
-}
+        }
 
         JButton restartButton = new JButton("Restart Game");
         restartButton.addActionListener(e -> restartGame());
@@ -240,6 +250,7 @@ private ImageIcon getCardIcon(Card card) {
         selectedChips.clear();
         nextTurn();
     }
+
     private void handleChipSelection(ChipType chip) {
         if (chipMode == ChipActionMode.NONE) {
             JOptionPane.showMessageDialog(
@@ -253,10 +264,9 @@ private ImageIcon getCardIcon(Card card) {
 
         if (chipMode == ChipActionMode.TAKE_TWO_SAME) {
             selectedChips.add(chip);
-            selectedChips.add(chip);
 
             if (selectedChips.size() == 2) {
-                players[currentPlayer].takeSameChips(selectedChips.get(0), selectedChips.get(1));
+                players[currentPlayer].takeSameChips(selectedChips.get(0));
                 endChipAction();
             }
 
@@ -404,8 +414,10 @@ private JPanel createCardView(int row, int col) {
             chipCount.put(chip, 0);
         }
 
-        for (ChipType chip : player.getChips()) {
-            chipCount.put(chip, chipCount.get(chip) + 1);
+        EnumMap<ChipType, Integer> chips = player.getChips();
+
+        for (ChipType chip : ChipType.values()) {
+            chipCount.put(chip, chips.getOrDefault(chip, 0));
         }
 
         chipCount.forEach((k, v) ->

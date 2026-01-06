@@ -1,33 +1,36 @@
 package DataStorageLayer;
 
-import DomainLayer.Card;
-import DomainLayer.Player;
-
-import java.io.FileWriter;
-import java.io.IOException;
+import java.io.*;
 
 public class DataLogger {
 
-    public String fileName;
+    private final String fileName = "gameState.dat";
 
-    public DataLogger(String fileName) {
-        this.fileName = fileName;
-    }
-
-    public void logData(Player[] players, Card[] availableCards) {
-        try (FileWriter writer = new FileWriter(fileName, true)) {
-            writer.write("Game State:\n");
-
-            for (int i = 0; i < players.length; i++) {
-                writer.write("Player " + i + " has " +
-                        players[i].getCards().size() + " cards\n");
-            }
-
-            writer.write("Available cards: " + availableCards.length + "\n");
-            writer.write("----------------------\n");
-
+    public void saveGame(GameState state) {
+        try (ObjectOutputStream out =
+                     new ObjectOutputStream(new FileOutputStream(fileName))) {
+            out.writeObject(state);
+            System.out.println("Game state saved.");
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    public GameState loadGame() {
+        File f = new File(fileName);
+        if (!f.exists()) return null;
+
+        try (ObjectInputStream in =
+                     new ObjectInputStream(new FileInputStream(fileName))) {
+            System.out.println("Game state loaded.");
+            return (GameState) in.readObject();
+        } catch (IOException | ClassNotFoundException e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    public void clearSavedGame() {
+        new File(fileName).delete();
     }
 }
