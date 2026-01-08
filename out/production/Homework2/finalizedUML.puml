@@ -1,0 +1,76 @@
+@startuml SplendorGame
+
+enum ChipType {
+    RED
+    GREEN
+    BLUE
+    BLACK
+    WHITE
+}
+
+package presentationLayer {
+
+    enum ChipActionMode {
+        NONE
+        TAKE_TWO_SAME
+        TAKE_THREE_DIFFERENT
+    }
+
+    class Main {
+        -board : Card[][]
+        -players : Player[]
+        -currentPlayer : int
+        -chipMode : ChipActionMode
+        -selectedChips : ArrayList<ChipType>
+
+        -startNewGame() : void
+        -updateUIState() : void
+        -nextTurn() : void
+
+        -attemptBuyCard(row:int, col:int) : void
+        -handleChipSelection(chip: ChipType) : void
+        -endChipAction() : void
+
+        -isBoardEmpty() : boolean
+        -getWinner() : int
+        -showGameOverDialog() : void
+        -restartGame() : void
+    }
+}
+
+package DomainLayer {
+
+    class Player {
+        -chips : ArrayList<ChipType>
+        -cards : ArrayList<Card>
+
+        +buyCard(card: Card) : boolean
+        +takeSameChips(chip1: ChipType, chip2: ChipType) : void
+        +takeDifferentChips(chip1: ChipType, chip2: ChipType, chip3: ChipType) : void
+        +getChips() : ArrayList<ChipType>
+        +getCards() : ArrayList<Card>
+    }
+
+    class Card {
+        +cost : ArrayList<ChipType>
+        +pointValue : int
+    }
+}
+
+package dataStorageLayer {
+
+    class DataLogger {
+        +fileName : String
+        +logData(players: Player[], availableCards: Card[]) : void
+    }
+}
+
+Main --> DataLogger
+Main --> "2" Player
+Main --> ChipActionMode
+
+Player --> "*" Card
+Player --> ChipType
+Card --> ChipType
+
+@enduml
