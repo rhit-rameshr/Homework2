@@ -10,6 +10,8 @@ public class GameState implements Serializable {
     public Card[][] board;
     public Player[] players;
     public int currentPlayerIndex;
+    public ArrayList<Move> moves;
+
 
     public GameState(Card[][] board, Player[] players, int currentPlayerIndex) {
         this.board = board;

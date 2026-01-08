@@ -6,11 +6,9 @@ import DataStorageLayer.*;
 import javax.imageio.ImageIO;
 import javax.swing.*;
 import java.awt.*;
+import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.EnumMap;
-import javax.imageio.ImageIO;
-import java.awt.image.BufferedImage;
-import java.net.URL;
 
 public class Main extends JFrame {
 
@@ -21,6 +19,8 @@ public class Main extends JFrame {
     private Player[] players;
     private int currentPlayer;
 
+    private ArrayList<Move> moves;
+
     private JPanel boardPanel;
     private JTextArea player1Info;
     private JTextArea player2Info;
@@ -30,9 +30,8 @@ public class Main extends JFrame {
     private JPanel leaderboardPanel;
     private LeaderboardState leaderboard;
 
-
-
     private DataLogger logger;
+
     private enum ChipActionMode {
         NONE,
         TAKE_TWO_SAME,
@@ -40,39 +39,36 @@ public class Main extends JFrame {
     }
 
     private ChipActionMode chipMode = ChipActionMode.NONE;
-    private ArrayList<ChipType> selectedChips = new ArrayList<>();
+    private final ArrayList<ChipType> selectedChips = new ArrayList<>();
 
     private final java.util.Map<Integer, ImageIcon> cardImageCache = new java.util.HashMap<>();
 
-
     public Main() {
-        players = new Player[] { new Player(), new Player() };
         logger = new DataLogger();
         leaderboard = logger.loadLeaderboard();
-
 
         GameState loaded = logger.loadGame();
         if (loaded != null) {
             board = loaded.board;
             players = loaded.players;
             currentPlayer = loaded.currentPlayerIndex;
+
+            moves = (loaded.moves != null) ? loaded.moves : new ArrayList<>();
         } else {
             startNewGame();
         }
 
-        startNewGame();
         setupUI();
         updateUIState();
     }
 
-    /* ================= GAME LOGIC ================= */
+
     private ArrayList<ChipType> generateCost(int points) {
         ArrayList<ChipType> cost = new ArrayList<>();
 
         ChipType[] colors = ChipType.values();
-        ChipType primary = colors[(int)(Math.random() * colors.length)];
+        ChipType primary = colors[(int) (Math.random() * colors.length)];
 
-        // At least two of one color
         cost.add(primary);
         cost.add(primary);
 
@@ -88,7 +84,7 @@ public class Main extends JFrame {
 
             if (usedColors.size() < maxExtraColors + 1 && Math.random() > 0.5) {
                 do {
-                    next = colors[(int)(Math.random() * colors.length)];
+                    next = colors[(int) (Math.random() * colors.length)];
                 } while (usedColors.contains(next));
                 usedColors.add(next);
             } else {
@@ -104,27 +100,31 @@ public class Main extends JFrame {
 
     private void startNewGame() {
         logger.clearSavedGame();
+
+        String p1 = JOptionPane.showInputDialog(this, "Enter name for Player 1:");
+        if (p1 == null || p1.isBlank()) p1 = "Player 1";
+
+        String p2 = JOptionPane.showInputDialog(this, "Enter name for Player 2:");
+        if (p2 == null || p2.isBlank()) p2 = "Player 2";
+
+        players = new Player[]{ new Player(p1), new Player(p2) };
+        moves = new ArrayList<>();
+
         board = new Card[ROWS][COLS];
         currentPlayer = 0;
 
         for (int r = 0; r < ROWS; r++) {
             for (int c = 0; c < COLS; c++) {
-                int points = r + 1; // Row-based difficulty (1–3)
+                int points = r + 1;
                 ArrayList<ChipType> cost = generateCost(points);
                 board[r][c] = new Card(cost, points);
             }
         }
     }
 
-
     private void nextTurn() {
         currentPlayer = (currentPlayer + 1) % players.length;
         updateUIState();
-    }
-
-    private void takeChip(ChipType chip) {
-        players[currentPlayer].takeSameChips(chip);
-        nextTurn();
     }
 
     private void attemptBuyCard(int row, int col) {
@@ -134,15 +134,21 @@ public class Main extends JFrame {
         Player player = players[currentPlayer];
 
         if (player.buyCard(card)) {
+
+            moves.add(new Move(
+                    Move.Type.BUY_CARD,
+                    currentPlayer,
+                    "Bought " + card.pointValue + "VP card from row " + (row + 1)
+            ));
+
             board[row][col] = null;
 
             if (isBoardEmpty()) {
                 updateUIState();
-                recordGameResult();
-                showGameOverDialog();
+                recordGameResult();     // IMPORTANT: saves leaderboard history/stats
+                showGameOverDialog();   // can also auto-show leaderboard here if qualifies
                 return;
             }
-
 
             nextTurn();
         } else {
@@ -156,48 +162,39 @@ public class Main extends JFrame {
     }
 
     private void restartGame() {
-        players = new Player[] { new Player(), new Player() };
         startNewGame();
         updateUIState();
     }
 
-    /* ================= UI ================= */
-private ImageIcon getCardIcon(Card card) {
-    int key = card.pointValue;
 
-    // Return cached icon if already loaded
-    if (cardImageCache.containsKey(key)) {
-        return cardImageCache.get(key);
+    private ImageIcon getCardIcon(Card card) {
+        int key = card.pointValue;
+
+        if (cardImageCache.containsKey(key)) {
+            return cardImageCache.get(key);
+        }
+
+        try {
+            String[] localFiles = {
+                    "/resources/img1.jpg",
+                    "/resources/img2.jpg",
+                    "/resources/img3.jpg"
+            };
+
+            String path = localFiles[(key - 1) % localFiles.length];
+            BufferedImage img = ImageIO.read(getClass().getResource(path));
+
+            Image scaled = img.getScaledInstance(90, 70, Image.SCALE_SMOOTH);
+            ImageIcon icon = new ImageIcon(scaled);
+
+            cardImageCache.put(key, icon);
+            return icon;
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
     }
-
-    try {
-        // Local image files (you can add more as needed)
-        String[] localFiles = {
-            "resources/img1.jpg",
-            "resources/img2.jpg",
-            "resources/img3.jpg"
-        };
-
-        // Map pointValue to an image deterministically
-        String path = localFiles[(key - 1) % localFiles.length];
-
-        // Load image from resources
-        BufferedImage img = ImageIO.read(getClass().getResource(path));
-
-        // Scale image to fit card
-        Image scaled = img.getScaledInstance(90, 70, Image.SCALE_SMOOTH);
-        ImageIcon icon = new ImageIcon(scaled);
-
-        // Cache and return
-        cardImageCache.put(key, icon);
-        return icon;
-
-    } catch (Exception e) {
-        e.printStackTrace();
-        return null; // fallback: no image
-    }
-}
-
 
     private void setupUI() {
         setTitle("Card Game");
@@ -214,7 +211,6 @@ private ImageIcon getCardIcon(Card card) {
         JPanel infoPanel = new JPanel(new GridLayout(1, 2));
         player1Info = new JTextArea();
         player2Info = new JTextArea();
-
         player1Info.setEditable(false);
         player2Info.setEditable(false);
 
@@ -238,7 +234,6 @@ private ImageIcon getCardIcon(Card card) {
         });
         controlPanel.add(takeThreeDiffBtn);
 
-        /* Individual chip buttons */
         for (ChipType chip : ChipType.values()) {
             JButton chipButton = new JButton(chip.toString());
             chipButton.addActionListener(e -> handleChipSelection(chip));
@@ -249,10 +244,11 @@ private ImageIcon getCardIcon(Card card) {
         restartButton.addActionListener(e -> restartGame());
         controlPanel.add(restartButton);
 
-        add(controlPanel, BorderLayout.SOUTH);
+        JButton viewLeaderboardBtn = new JButton("View Leaderboard");
+        viewLeaderboardBtn.addActionListener(e -> showLeaderboardDialog());
+        controlPanel.add(viewLeaderboardBtn);
 
-        setSize(1000, 600);
-        setVisible(true);
+        add(controlPanel, BorderLayout.SOUTH);
 
         leaderboardArea = new JTextArea();
         leaderboardArea.setEditable(false);
@@ -260,9 +256,10 @@ private ImageIcon getCardIcon(Card card) {
         leaderboardPanel = new JPanel(new BorderLayout());
         leaderboardPanel.add(new JLabel("Leaderboard", SwingConstants.CENTER), BorderLayout.NORTH);
         leaderboardPanel.add(new JScrollPane(leaderboardArea), BorderLayout.CENTER);
-
         add(leaderboardPanel, BorderLayout.EAST);
 
+        setSize(1000, 600);
+        setVisible(true);
     }
 
     private void endChipAction() {
@@ -287,6 +284,14 @@ private ImageIcon getCardIcon(Card card) {
 
             if (selectedChips.size() == 2) {
                 players[currentPlayer].takeSameChips(selectedChips.get(0));
+
+                // Log move
+                moves.add(new Move(
+                        Move.Type.TAKE_TWO_SAME,
+                        currentPlayer,
+                        "Took 2 " + selectedChips.get(0)
+                ));
+
                 endChipAction();
             }
 
@@ -304,23 +309,30 @@ private ImageIcon getCardIcon(Card card) {
             selectedChips.add(chip);
 
             if (selectedChips.size() == 3) {
-                players[currentPlayer]
-                        .takeDifferentChips(
-                                selectedChips.get(0),
-                                selectedChips.get(1),
+                players[currentPlayer].takeDifferentChips(
+                        selectedChips.get(0),
+                        selectedChips.get(1),
+                        selectedChips.get(2)
+                );
+
+                moves.add(new Move(
+                        Move.Type.TAKE_THREE_DIFF,
+                        currentPlayer,
+                        "Took 3 different chips: " +
+                                selectedChips.get(0) + ", " +
+                                selectedChips.get(1) + ", " +
                                 selectedChips.get(2)
-                        );
+                ));
+
                 endChipAction();
             }
         }
-    }   
+    }
 
     private boolean isBoardEmpty() {
         for (int r = 0; r < ROWS; r++) {
             for (int c = 0; c < COLS; c++) {
-                if (board[r][c] != null) {
-                    return false;
-                }
+                if (board[r][c] != null) return false;
             }
         }
         return true;
@@ -332,38 +344,36 @@ private ImageIcon getCardIcon(Card card) {
 
         if (p1Points > p2Points) return 0;
         if (p2Points > p1Points) return 1;
-        return -1; // tie
+        return -1;
     }
+
     private void recordGameResult() {
-        String[] names = {"Player 1", "Player 2"};
+        String name0 = players[0].getName();
+        String name1 = players[1].getName();
 
         int winner = getWinner();
-        int p0 = players[0].getVictoryPoints();
-        int p1 = players[1].getVictoryPoints();
+        int p0 = calculatePoints(players[0]);
+        int p1 = calculatePoints(players[1]);
 
 
-        leaderboard.bestVP.put(names[0], Math.max(leaderboard.bestVP.getOrDefault(names[0], 0), p0));
-        leaderboard.bestVP.put(names[1], Math.max(leaderboard.bestVP.getOrDefault(names[1], 0), p1));
+        leaderboard.bestVP.put(name0, Math.max(leaderboard.bestVP.getOrDefault(name0, 0), p0));
+        leaderboard.bestVP.put(name1, Math.max(leaderboard.bestVP.getOrDefault(name1, 0), p1));
+
 
         if (winner != -1) {
-            String wName = names[winner];
+            String wName = players[winner].getName();
             leaderboard.wins.put(wName, leaderboard.wins.getOrDefault(wName, 0) + 1);
         }
+
 
         logger.saveLeaderboard(leaderboard);
     }
 
-
     private void showGameOverDialog() {
         int winner = getWinner();
-
-        String message;
-
-        if (winner == -1) {
-            message = "The game is a tie!";
-        } else {
-            message = "Player " + (winner + 1) + " wins!";
-        }
+        String message = (winner == -1)
+                ? "The game is a tie!"
+                : players[winner].getName() + " wins!";
 
         int choice = JOptionPane.showOptionDialog(
                 this,
@@ -384,106 +394,95 @@ private ImageIcon getCardIcon(Card card) {
     }
 
     private void updateUIState() {
-        boardPanel.removeAll();
+        logger.saveGame(new GameState(board, players, currentPlayer, moves));
 
+        boardPanel.removeAll();
         for (int r = 0; r < ROWS; r++) {
             for (int c = 0; c < COLS; c++) {
                 boardPanel.add(createCardView(r, c));
             }
         }
 
-        updatePlayerInfo(player1Info, players[0], "Player 1", currentPlayer == 0);
-        updatePlayerInfo(player2Info, players[1], "Player 2", currentPlayer == 1);
+        updatePlayerInfo(player1Info, players[0], players[0].getName(), currentPlayer == 0);
+        updatePlayerInfo(player2Info, players[1], players[1].getName(), currentPlayer == 1);
 
         updateLeaderboardUI();
-
-
-        turnIndicator.setText("Current Turn: Player " + (currentPlayer + 1));
+        turnIndicator.setText("Current Turn: " + players[currentPlayer].getName());
 
         boardPanel.revalidate();
         boardPanel.repaint();
-        logger.saveGame(new GameState(board, players, currentPlayer));
     }
 
+    private JPanel createCardView(int row, int col) {
+        JPanel panel = new JPanel();
+        panel.setBorder(BorderFactory.createLineBorder(Color.BLACK));
+        panel.setLayout(new BorderLayout());
 
+        Card card = board[row][col];
 
-private JPanel createCardView(int row, int col) {
-    JPanel panel = new JPanel();
-    panel.setBorder(BorderFactory.createLineBorder(Color.BLACK));
-    panel.setLayout(new BorderLayout());
+        if (card != null) {
+            JLabel imageLabel = new JLabel();
+            imageLabel.setHorizontalAlignment(SwingConstants.CENTER);
+            imageLabel.setPreferredSize(new Dimension(90, 70));
+            imageLabel.setIcon(getCardIcon(card));
 
-    Card card = board[row][col];
+            JLabel points = new JLabel("⭐ " + card.pointValue, SwingConstants.CENTER);
+            JLabel cost = new JLabel("Cost: " + card.cost, SwingConstants.CENTER);
 
-    if (card != null) {
-        JLabel imageLabel = new JLabel();
-        imageLabel.setHorizontalAlignment(SwingConstants.CENTER);
-        imageLabel.setPreferredSize(new Dimension(90, 70));
-        imageLabel.setIcon(getCardIcon(card)); // use local image
+            JPanel textPanel = new JPanel(new GridLayout(2, 1));
+            textPanel.add(points);
+            textPanel.add(cost);
 
-        JLabel points = new JLabel("⭐ " + card.pointValue, SwingConstants.CENTER);
-        JLabel cost = new JLabel("Cost: " + card.cost, SwingConstants.CENTER);
+            panel.add(imageLabel, BorderLayout.CENTER);
+            panel.add(textPanel, BorderLayout.SOUTH);
 
-        JPanel textPanel = new JPanel(new GridLayout(2, 1));
-        textPanel.add(points);
-        textPanel.add(cost);
+            panel.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            panel.addMouseListener(new java.awt.event.MouseAdapter() {
+                @Override
+                public void mouseClicked(java.awt.event.MouseEvent e) {
+                    attemptBuyCard(row, col);
+                }
+            });
 
-        panel.add(imageLabel, BorderLayout.CENTER);
-        panel.add(textPanel, BorderLayout.SOUTH);
+        } else {
+            panel.add(new JLabel("Empty", SwingConstants.CENTER));
+        }
 
-        panel.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        panel.addMouseListener(new java.awt.event.MouseAdapter() {
-            @Override
-            public void mouseClicked(java.awt.event.MouseEvent e) {
-                attemptBuyCard(row, col);
-            }
-        });
-
-    } else {
-        panel.add(new JLabel("Empty", SwingConstants.CENTER));
+        return panel;
     }
 
-    return panel;
-}
-
-    private void updatePlayerInfo(
-            JTextArea area,
-            Player player,
-            String title,
-            boolean isCurrent
-    ) {
+    private void updatePlayerInfo(JTextArea area, Player player, String title, boolean isCurrent) {
         area.setText(title + (isCurrent ? "  ← TURN\n" : "\n"));
         area.append("Victory Points: " + calculatePoints(player) + "\n");
         area.append("Chips:\n");
 
         EnumMap<ChipType, Integer> chipCount = new EnumMap<>(ChipType.class);
-        for (ChipType chip : ChipType.values()) {
-            chipCount.put(chip, 0);
-        }
+        for (ChipType chip : ChipType.values()) chipCount.put(chip, 0);
 
         EnumMap<ChipType, Integer> chips = player.getChips();
-
         for (ChipType chip : ChipType.values()) {
             chipCount.put(chip, chips.getOrDefault(chip, 0));
         }
 
-        chipCount.forEach((k, v) ->
-                area.append("  " + k + ": " + v + "\n"));
-
+        chipCount.forEach((k, v) -> area.append("  " + k + ": " + v + "\n"));
         area.setBackground(isCurrent ? new Color(220, 255, 220) : Color.WHITE);
     }
 
     private int calculatePoints(Player player) {
-        return player.getCards()
-                     .stream()
-                     .mapToInt(c -> c.pointValue)
-                     .sum();
+        return player.getCards().stream().mapToInt(c -> c.pointValue).sum();
     }
 
     private void updateLeaderboardUI() {
-        String[] names = {"Player 1", "Player 2"};
-
         StringBuilder sb = new StringBuilder();
         sb.append("HISTORIC LEADERBOARD\n\n");
+
+        java.util.LinkedHashSet<String> names = new java.util.LinkedHashSet<>();
+        if (players != null) {
+            names.add(players[0].getName());
+            names.add(players[1].getName());
+        }
+        names.addAll(leaderboard.wins.keySet());
+        names.addAll(leaderboard.bestVP.keySet());
 
         for (String name : names) {
             int wins = leaderboard.wins.getOrDefault(name, 0);
@@ -495,11 +494,18 @@ private JPanel createCardView(int row, int col) {
                     .append("\n");
         }
 
-        sb.append("\nCurrent Turn: ").append(names[currentPlayer]);
         leaderboardArea.setText(sb.toString());
     }
 
-
+    private void showLeaderboardDialog() {
+        updateLeaderboardUI();
+        JOptionPane.showMessageDialog(
+                this,
+                new JScrollPane(leaderboardArea),
+                "Leaderboard",
+                JOptionPane.INFORMATION_MESSAGE
+        );
+    }
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(Main::new);
