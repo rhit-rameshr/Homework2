@@ -52,11 +52,11 @@ public class Main extends JFrame {
             board = loaded.board;
             players = loaded.players;
             currentPlayer = loaded.currentPlayerIndex;
-
             moves = (loaded.moves != null) ? loaded.moves : new ArrayList<>();
         } else {
             startNewGame();
         }
+
 
         setupUI();
         updateUIState();
@@ -121,6 +121,7 @@ public class Main extends JFrame {
             }
         }
     }
+
 
     private void nextTurn() {
         currentPlayer = (currentPlayer + 1) % players.length;
@@ -396,6 +397,8 @@ public class Main extends JFrame {
     private void updateUIState() {
         logger.saveGame(new GameState(board, players, currentPlayer, moves));
 
+
+
         boardPanel.removeAll();
         for (int r = 0; r < ROWS; r++) {
             for (int c = 0; c < COLS; c++) {
@@ -498,7 +501,7 @@ public class Main extends JFrame {
     }
 
     private void showLeaderboardDialog() {
-        updateLeaderboardUI();
+        updateLeaderboardUI(); 
         JOptionPane.showMessageDialog(
                 this,
                 new JScrollPane(leaderboardArea),

@@ -34,7 +34,6 @@ public class LeaderboardManager {
     }
 
     public String analyze(GameRecord record) {
-        // short, “I analyzed the game” sentence
         if (record.margin >= 5) {
             return "Big win: large VP margin likely from consistently higher-value purchases.";
         }
