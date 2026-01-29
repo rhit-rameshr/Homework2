@@ -17,60 +17,253 @@ package presentationLayer {
     }
 
     class Main {
-        -board : Card[][]
-        -players : Player[]
-        -currentPlayer : int
+        -gameController : GameController
+        -boardPanel : JPanel
+        -player1Info : JTextArea
+        -player2Info : JTextArea
+        -turnIndicator : JLabel
+        -leaderboardArea : JTextArea
         -chipMode : ChipActionMode
         -selectedChips : ArrayList<ChipType>
+        -cardImageCache : Map<Integer, ImageIcon>
 
-        -startNewGame() : void
+        +Main()
+        -promptForNewGame() : void
+        -setupUI() : void
         -updateUIState() : void
-        -nextTurn() : void
 
         -attemptBuyCard(row:int, col:int) : void
         -handleChipSelection(chip: ChipType) : void
         -endChipAction() : void
+        -checkGameOver() : void
 
-        -isBoardEmpty() : boolean
-        -getWinner() : int
-        -showGameOverDialog() : void
         -restartGame() : void
+        -showGameOverDialog() : void
+        -showLeaderboardDialog() : void
+        -showError(message: String) : void
+
+        -createCardView(row:int, col:int, card:Card) : JPanel
+        -updatePlayerInfo(area:JTextArea, player:Player, title:String, isCurrent:boolean) : void
+        -updateLeaderboardUI() : void
+        -getCardIcon(card:Card) : ImageIcon
+        -formatCost(cost:ArrayList<ChipType>) : String
     }
 }
 
 package DomainLayer {
 
+    class GameController {
+        -ROWS : int {static}
+        -COLS : int {static}
+        -board : Card[][]
+        -players : Player[]
+        -currentPlayerIndex : int
+        -moveHistory : ArrayList<Move>
+        -dataLogger : DataLogger
+        -leaderboardManager : LeaderboardManager
+        -leaderboardState : LeaderboardState
+
+        +GameController()
+        +startNewGame(player1Name:String, player2Name:String) : void
+        +loadSavedGame() : boolean
+
+        +attemptBuyCard(row:int, col:int) : String
+        +takeTwoSameChips(chip:ChipType) : String
+        +takeThreeDifferentChips(c1:ChipType, c2:ChipType, c3:ChipType) : String
+
+        +getBoard() : Card[][]
+        +getPlayers() : Player[]
+        +getCurrentPlayerIndex() : int
+        +getCurrentPlayer() : Player
+        +isGameOver() : boolean
+        +getWinnerIndex() : int
+        +getLeaderboardState() : LeaderboardState
+        +getRows() : int
+        +getCols() : int
+
+        -initializeBoard() : void
+        -generateCost(points:int) : ArrayList<ChipType>
+        -nextTurn() : void
+        -saveGameState() : void
+        -isBoardEmpty() : boolean
+        -recordGameResult() : void
+    }
+
     class Player {
-        -chips : ArrayList<ChipType>
+        -name : String
+        -chips : EnumMap<ChipType, Integer>
         -cards : ArrayList<Card>
 
-        +buyCard(card: Card) : boolean
-        +takeSameChips(chip1: ChipType, chip2: ChipType) : void
-        +takeDifferentChips(chip1: ChipType, chip2: ChipType, chip3: ChipType) : void
-        +getChips() : ArrayList<ChipType>
+        +Player()
+        +Player(name:String)
+        +getName() : String
+        +takeSameChips(chip:ChipType) : void
+        +takeDifferentChips(c1:ChipType, c2:ChipType, c3:ChipType) : void
+        +buyCard(card:Card) : boolean
+        +getVictoryPoints() : int
+        +getChips() : EnumMap<ChipType, Integer>
         +getCards() : ArrayList<Card>
     }
 
     class Card {
         +cost : ArrayList<ChipType>
         +pointValue : int
+
+        +Card(cost:ArrayList<ChipType>, pointValue:int)
+    }
+
+    class LeaderboardManager {
+        -MAX_ENTRIES : int
+
+        +updateLeaderboard(lb:LeaderboardState, record:GameRecord) : LeaderboardState
+        +qualifies(lb:LeaderboardState, record:GameRecord) : boolean
+        +extraordinary(record:GameRecord) : boolean
+        +analyze(record:GameRecord) : String
     }
 }
 
-package dataStorageLayer {
+package DataStorageLayer {
 
     class DataLogger {
-        +fileName : String
-        +logData(players: Player[], availableCards: Card[]) : void
+        -fileName : String
+        -leaderboardFile : String
+
+        +saveGame(state:GameState) : void
+        +loadGame() : GameState
+        +saveLeaderboard(lb:LeaderboardState) : void
+        +loadLeaderboard() : LeaderboardState
+        +clearSavedGame() : void
+    }
+
+    class GameState {
+        +board : Card[][]
+        +players : Player[]
+        +currentPlayerIndex : int
+        +moves : ArrayList<Move>
+
+        +GameState(board:Card[][], players:Player[], currentPlayerIndex:int, moves:ArrayList<Move>)
+    }
+
+    class LeaderboardState {
+        +wins : Map<String, Integer>
+        +bestVP : Map<String, Integer>
+        +records : ArrayList<GameRecord>
+    }
+
+    class GameRecord {
+        +player1Name : String
+        +player2Name : String
+        +winnerIndex : int
+        +p1VP : int
+        +p2VP : int
+        +winnerVP : int
+        +margin : int
+        +p1BuyCount : int
+        +p2BuyCount : int
+        +winnerBuyCount : int
+        +loserBuyCount : int
+        +p1HighRowBuys : int
+        +p2HighRowBuys : int
+        +winnerHighRowBuys : int
+        +loserHighRowBuys : int
+        +analysisText : String
+    }
+
+    class Move {
+        +type : Type
+        +playerIndex : int
+        +detail : String
+
+        +Move(type:Type, playerIndex:int, detail:String)
+    }
+
+    enum Type {
+        TAKE_TWO_SAME
+        TAKE_THREE_DIFF
+        BUY_CARD
     }
 }
 
-Main --> DataLogger
-Main --> "2" Player
+' Presentation Layer relationships
+Main --> GameController
 Main --> ChipActionMode
+
+' Domain Layer relationships
+GameController --> "2" Player
+GameController --> DataLogger
+GameController --> LeaderboardManager
+GameController --> LeaderboardState
+GameController --> "*" Card
+GameController --> "*" Move
 
 Player --> "*" Card
 Player --> ChipType
+
 Card --> ChipType
+
+LeaderboardManager --> LeaderboardState
+LeaderboardManager --> GameRecord
+
+' Data Storage Layer relationships
+DataLogger --> GameState
+DataLogger --> LeaderboardState
+
+GameState --> "2" Player
+GameState --> "*" Card
+GameState --> "*" Move
+
+LeaderboardState --> "*" GameRecord
+
+Move --> Type
+
+' Note: Serializable interface implementations
+note right of GameState
+  implements Serializable
+end note
+
+note right of LeaderboardState
+  implements Serializable
+end note
+
+note right of GameRecord
+  implements Serializable
+end note
+
+note right of Move
+  implements Serializable
+end note
+
+note right of Player
+  implements Serializable
+end note
+
+note right of Card
+  implements Serializable
+end note
+
+' Architecture notes
+note top of Main
+  PRESENTATION LAYER
+  - UI components only
+  - No game logic
+  - Calls GameController for all actions
+  - Displays results from controller
+end note
+
+note top of GameController
+  DOMAIN LAYER
+  - All game rules and logic
+  - Validates moves
+  - Manages game state
+  - No UI dependencies
+end note
+
+note top of DataLogger
+  DATA STORAGE LAYER
+  - File I/O operations
+  - Serialization/Deserialization
+  - No game logic
+  - No UI dependencies
+end note
 
 @enduml

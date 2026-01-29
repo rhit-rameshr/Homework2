@@ -10,27 +10,20 @@ import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.EnumMap;
 
+/**
+ * Main UI class - Presentation Layer only
+ * All game logic has been moved to GameController in the Domain Layer
+ */
 public class Main extends JFrame {
 
-    private static final int ROWS = 3;
-    private static final int COLS = 5;
-
-    private Card[][] board;
-    private Player[] players;
-    private int currentPlayer;
-
-    private ArrayList<Move> moves;
+    private GameController gameController;
 
     private JPanel boardPanel;
     private JTextArea player1Info;
     private JTextArea player2Info;
     private JLabel turnIndicator;
-
     private JTextArea leaderboardArea;
     private JPanel leaderboardPanel;
-    private LeaderboardState leaderboard;
-
-    private DataLogger logger;
 
     private enum ChipActionMode {
         NONE,
@@ -44,130 +37,55 @@ public class Main extends JFrame {
     private final java.util.Map<Integer, ImageIcon> cardImageCache = new java.util.HashMap<>();
 
     public Main() {
-        logger = new DataLogger();
-        leaderboard = logger.loadLeaderboard();
-
-        GameState loaded = logger.loadGame();
-        if (loaded != null) {
-            board = loaded.board;
-            players = loaded.players;
-            currentPlayer = loaded.currentPlayerIndex;
-            moves = (loaded.moves != null) ? loaded.moves : new ArrayList<>();
-        } else {
-            startNewGame();
-        }
-
+        gameController = new GameController();
 
         setupUI();
+
+        // Check if there's a saved game
+        boolean hasSavedGame = gameController.loadSavedGame();
+
+        if (hasSavedGame) {
+            // Ask if they want to continue or start new
+            int choice = JOptionPane.showOptionDialog(
+                    this,
+                    "A saved game was found. Would you like to continue or start a new game?",
+                    "Continue Game?",
+                    JOptionPane.YES_NO_OPTION,
+                    JOptionPane.QUESTION_MESSAGE,
+                    null,
+                    new String[]{"Continue", "New Game"},
+                    "Continue"
+            );
+
+            if (choice == JOptionPane.NO_OPTION) {
+                // User wants new game
+                promptForNewGame();
+            }
+            // else: keep the loaded game
+        } else {
+            // No saved game, prompt for new
+            promptForNewGame();
+        }
+
         updateUIState();
     }
 
-
-    private ArrayList<ChipType> generateCost(int points) {
-        ArrayList<ChipType> cost = new ArrayList<>();
-
-        ChipType[] colors = ChipType.values();
-        ChipType primary = colors[(int) (Math.random() * colors.length)];
-
-        cost.add(primary);
-        cost.add(primary);
-
-        int totalCost = points + 1;
-        int remaining = totalCost - 2;
-
-        int maxExtraColors = Math.min(2, colors.length - 1);
-        ArrayList<ChipType> usedColors = new ArrayList<>();
-        usedColors.add(primary);
-
-        while (remaining > 0) {
-            ChipType next;
-
-            if (usedColors.size() < maxExtraColors + 1 && Math.random() > 0.5) {
-                do {
-                    next = colors[(int) (Math.random() * colors.length)];
-                } while (usedColors.contains(next));
-                usedColors.add(next);
-            } else {
-                next = primary;
-            }
-
-            cost.add(next);
-            remaining--;
-        }
-
-        return cost;
-    }
-
-    private void startNewGame() {
-        logger.clearSavedGame();
-
+    /**
+     * Prompt for player names and start new game
+     */
+    private void promptForNewGame() {
         String p1 = JOptionPane.showInputDialog(this, "Enter name for Player 1:");
         if (p1 == null || p1.isBlank()) p1 = "Player 1";
 
         String p2 = JOptionPane.showInputDialog(this, "Enter name for Player 2:");
         if (p2 == null || p2.isBlank()) p2 = "Player 2";
 
-        players = new Player[]{ new Player(p1), new Player(p2) };
-        moves = new ArrayList<>();
-
-        board = new Card[ROWS][COLS];
-        currentPlayer = 0;
-
-        for (int r = 0; r < ROWS; r++) {
-            for (int c = 0; c < COLS; c++) {
-                int points = r + 1;
-                ArrayList<ChipType> cost = generateCost(points);
-                board[r][c] = new Card(cost, points);
-            }
-        }
+        gameController.startNewGame(p1, p2);
     }
 
-
-    private void nextTurn() {
-        currentPlayer = (currentPlayer + 1) % players.length;
-        updateUIState();
-    }
-
-    private void attemptBuyCard(int row, int col) {
-        Card card = board[row][col];
-        if (card == null) return;
-
-        Player player = players[currentPlayer];
-
-        if (player.buyCard(card)) {
-
-            moves.add(new Move(
-                    Move.Type.BUY_CARD,
-                    currentPlayer,
-                    "Bought " + card.pointValue + "VP card from row " + (row + 1)
-            ));
-
-            board[row][col] = null;
-
-            if (isBoardEmpty()) {
-                updateUIState();
-                recordGameResult();     // IMPORTANT: saves leaderboard history/stats
-                showGameOverDialog();   // can also auto-show leaderboard here if qualifies
-                return;
-            }
-
-            nextTurn();
-        } else {
-            JOptionPane.showMessageDialog(
-                    this,
-                    "Not enough chips to buy this card.",
-                    "Purchase Failed",
-                    JOptionPane.WARNING_MESSAGE
-            );
-        }
-    }
-
-    private void restartGame() {
-        startNewGame();
-        updateUIState();
-    }
-
-
+    /**
+     * Get card icon for display
+     */
     private ImageIcon getCardIcon(Card card) {
         int key = card.pointValue;
 
@@ -197,18 +115,24 @@ public class Main extends JFrame {
         }
     }
 
+    /**
+     * Setup the user interface
+     */
     private void setupUI() {
-        setTitle("Card Game");
+        setTitle("Mini-Splendor Card Game");
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setLayout(new BorderLayout());
 
+        // Turn indicator at top
         turnIndicator = new JLabel("", SwingConstants.CENTER);
         turnIndicator.setFont(new Font("Arial", Font.BOLD, 16));
         add(turnIndicator, BorderLayout.NORTH);
 
-        boardPanel = new JPanel(new GridLayout(ROWS, COLS));
+        // Board in center
+        boardPanel = new JPanel(new GridLayout(gameController.getRows(), gameController.getCols()));
         add(boardPanel, BorderLayout.CENTER);
 
+        // Player info on left
         JPanel infoPanel = new JPanel(new GridLayout(1, 2));
         player1Info = new JTextArea();
         player2Info = new JTextArea();
@@ -219,12 +143,14 @@ public class Main extends JFrame {
         infoPanel.add(new JScrollPane(player2Info));
         add(infoPanel, BorderLayout.WEST);
 
+        // Control panel at bottom
         JPanel controlPanel = new JPanel();
 
         JButton takeTwoSameBtn = new JButton("Take 2 Same Chips");
         takeTwoSameBtn.addActionListener(e -> {
             chipMode = ChipActionMode.TAKE_TWO_SAME;
             selectedChips.clear();
+            showMessage("Select one chip color (click twice on same color button)");
         });
         controlPanel.add(takeTwoSameBtn);
 
@@ -232,9 +158,11 @@ public class Main extends JFrame {
         takeThreeDiffBtn.addActionListener(e -> {
             chipMode = ChipActionMode.TAKE_THREE_DIFFERENT;
             selectedChips.clear();
+            showMessage("Select three different chip colors");
         });
         controlPanel.add(takeThreeDiffBtn);
 
+        // Chip buttons
         for (ChipType chip : ChipType.values()) {
             JButton chipButton = new JButton(chip.toString());
             chipButton.addActionListener(e -> handleChipSelection(chip));
@@ -251,6 +179,7 @@ public class Main extends JFrame {
 
         add(controlPanel, BorderLayout.SOUTH);
 
+        // Leaderboard panel on right
         leaderboardArea = new JTextArea();
         leaderboardArea.setEditable(false);
 
@@ -259,24 +188,16 @@ public class Main extends JFrame {
         leaderboardPanel.add(new JScrollPane(leaderboardArea), BorderLayout.CENTER);
         add(leaderboardPanel, BorderLayout.EAST);
 
-        setSize(1000, 600);
+        setSize(1200, 650);
         setVisible(true);
     }
 
-    private void endChipAction() {
-        chipMode = ChipActionMode.NONE;
-        selectedChips.clear();
-        nextTurn();
-    }
-
+    /**
+     * Handle chip selection based on current mode
+     */
     private void handleChipSelection(ChipType chip) {
         if (chipMode == ChipActionMode.NONE) {
-            JOptionPane.showMessageDialog(
-                    this,
-                    "Choose a chip action first.",
-                    "No Action Selected",
-                    JOptionPane.WARNING_MESSAGE
-            );
+            showError("Choose a chip action first (Take 2 Same or Take 3 Different)");
             return;
         }
 
@@ -284,97 +205,104 @@ public class Main extends JFrame {
             selectedChips.add(chip);
 
             if (selectedChips.size() == 2) {
-                players[currentPlayer].takeSameChips(selectedChips.get(0));
-
-                // Log move
-                moves.add(new Move(
-                        Move.Type.TAKE_TWO_SAME,
-                        currentPlayer,
-                        "Took 2 " + selectedChips.get(0)
-                ));
-
-                endChipAction();
+                String error = gameController.takeTwoSameChips(selectedChips.get(0));
+                if (error != null) {
+                    showError(error);
+                    selectedChips.clear();
+                } else {
+                    endChipAction();
+                    checkGameOver();
+                }
             }
 
         } else if (chipMode == ChipActionMode.TAKE_THREE_DIFFERENT) {
             if (selectedChips.contains(chip)) {
-                JOptionPane.showMessageDialog(
-                        this,
-                        "Chips must be different.",
-                        "Invalid Selection",
-                        JOptionPane.WARNING_MESSAGE
-                );
+                showError("Chips must be different - you already selected " + chip);
                 return;
             }
 
             selectedChips.add(chip);
 
             if (selectedChips.size() == 3) {
-                players[currentPlayer].takeDifferentChips(
+                String error = gameController.takeThreeDifferentChips(
                         selectedChips.get(0),
                         selectedChips.get(1),
                         selectedChips.get(2)
                 );
-
-                moves.add(new Move(
-                        Move.Type.TAKE_THREE_DIFF,
-                        currentPlayer,
-                        "Took 3 different chips: " +
-                                selectedChips.get(0) + ", " +
-                                selectedChips.get(1) + ", " +
-                                selectedChips.get(2)
-                ));
-
-                endChipAction();
+                if (error != null) {
+                    showError(error);
+                    selectedChips.clear();
+                } else {
+                    endChipAction();
+                    checkGameOver();
+                }
             }
         }
     }
 
-    private boolean isBoardEmpty() {
-        for (int r = 0; r < ROWS; r++) {
-            for (int c = 0; c < COLS; c++) {
-                if (board[r][c] != null) return false;
-            }
+    /**
+     * End the current chip selection action
+     */
+    private void endChipAction() {
+        chipMode = ChipActionMode.NONE;
+        selectedChips.clear();
+        updateUIState();
+    }
+
+    /**
+     * Attempt to buy a card at the given position
+     */
+    private void attemptBuyCard(int row, int col) {
+        String error = gameController.attemptBuyCard(row, col);
+
+        if (error != null) {
+            showError(error);
+        } else {
+            updateUIState();
+            checkGameOver();
         }
-        return true;
     }
 
-    private int getWinner() {
-        int p1Points = calculatePoints(players[0]);
-        int p2Points = calculatePoints(players[1]);
-
-        if (p1Points > p2Points) return 0;
-        if (p2Points > p1Points) return 1;
-        return -1;
-    }
-
-    private void recordGameResult() {
-        String name0 = players[0].getName();
-        String name1 = players[1].getName();
-
-        int winner = getWinner();
-        int p0 = calculatePoints(players[0]);
-        int p1 = calculatePoints(players[1]);
-
-
-        leaderboard.bestVP.put(name0, Math.max(leaderboard.bestVP.getOrDefault(name0, 0), p0));
-        leaderboard.bestVP.put(name1, Math.max(leaderboard.bestVP.getOrDefault(name1, 0), p1));
-
-
-        if (winner != -1) {
-            String wName = players[winner].getName();
-            leaderboard.wins.put(wName, leaderboard.wins.getOrDefault(wName, 0) + 1);
+    /**
+     * Check if game is over and show dialog
+     */
+    private void checkGameOver() {
+        if (gameController.isGameOver()) {
+            showGameOverDialog();
         }
-
-
-        logger.saveLeaderboard(leaderboard);
     }
 
+    /**
+     * Restart the game
+     */
+    private void restartGame() {
+        promptForNewGame();
+        updateUIState();
+    }
+
+    /**
+     * Show game over dialog
+     */
     private void showGameOverDialog() {
-        int winner = getWinner();
-        String message = (winner == -1)
-                ? "The game is a tie!"
-                : players[winner].getName() + " wins!";
+        int winner = gameController.getWinnerIndex();
+        Player[] players = gameController.getPlayers();
+
+        String message;
+        if (winner == -1) {
+            message = "The game is a tie!\n" +
+                    players[0].getName() + ": " + players[0].getVictoryPoints() + " VP\n" +
+                    players[1].getName() + ": " + players[1].getVictoryPoints() + " VP";
+        } else {
+            message = players[winner].getName() + " wins with " +
+                    players[winner].getVictoryPoints() + " victory points!";
+        }
+
+        // Show leaderboard info
+        LeaderboardState lb = gameController.getLeaderboardState();
+        if (!lb.records.isEmpty() && lb.records.get(0) != null) {
+            GameRecord lastGame = lb.records.get(0);
+            message += "\n\n" + lastGame.analysisText;
+        }
 
         int choice = JOptionPane.showOptionDialog(
                 this,
@@ -383,8 +311,8 @@ public class Main extends JFrame {
                 JOptionPane.YES_NO_OPTION,
                 JOptionPane.INFORMATION_MESSAGE,
                 null,
-                new String[]{"Restart Game", "Exit"},
-                "Restart Game"
+                new String[]{"New Game", "Exit"},
+                "New Game"
         );
 
         if (choice == JOptionPane.YES_OPTION) {
@@ -394,34 +322,43 @@ public class Main extends JFrame {
         }
     }
 
+    /**
+     * Update all UI elements based on current game state
+     */
     private void updateUIState() {
-        logger.saveGame(new GameState(board, players, currentPlayer, moves));
-
-
-
+        // Update board
         boardPanel.removeAll();
-        for (int r = 0; r < ROWS; r++) {
-            for (int c = 0; c < COLS; c++) {
-                boardPanel.add(createCardView(r, c));
+        Card[][] board = gameController.getBoard();
+        for (int r = 0; r < gameController.getRows(); r++) {
+            for (int c = 0; c < gameController.getCols(); c++) {
+                boardPanel.add(createCardView(r, c, board[r][c]));
             }
         }
 
-        updatePlayerInfo(player1Info, players[0], players[0].getName(), currentPlayer == 0);
-        updatePlayerInfo(player2Info, players[1], players[1].getName(), currentPlayer == 1);
+        // Update player info
+        Player[] players = gameController.getPlayers();
+        int currentIdx = gameController.getCurrentPlayerIndex();
 
+        updatePlayerInfo(player1Info, players[0], players[0].getName(), currentIdx == 0);
+        updatePlayerInfo(player2Info, players[1], players[1].getName(), currentIdx == 1);
+
+        // Update leaderboard
         updateLeaderboardUI();
-        turnIndicator.setText("Current Turn: " + players[currentPlayer].getName());
+
+        // Update turn indicator
+        turnIndicator.setText("Current Turn: " + gameController.getCurrentPlayer().getName());
 
         boardPanel.revalidate();
         boardPanel.repaint();
     }
 
-    private JPanel createCardView(int row, int col) {
+    /**
+     * Create a card view panel
+     */
+    private JPanel createCardView(int row, int col, Card card) {
         JPanel panel = new JPanel();
         panel.setBorder(BorderFactory.createLineBorder(Color.BLACK));
         panel.setLayout(new BorderLayout());
-
-        Card card = board[row][col];
 
         if (card != null) {
             JLabel imageLabel = new JLabel();
@@ -430,7 +367,8 @@ public class Main extends JFrame {
             imageLabel.setIcon(getCardIcon(card));
 
             JLabel points = new JLabel("⭐ " + card.pointValue, SwingConstants.CENTER);
-            JLabel cost = new JLabel("Cost: " + card.cost, SwingConstants.CENTER);
+            JLabel cost = new JLabel("Cost: " + formatCost(card.cost), SwingConstants.CENTER);
+            cost.setFont(new Font("Arial", Font.PLAIN, 10));
 
             JPanel textPanel = new JPanel(new GridLayout(2, 1));
             textPanel.add(points);
@@ -454,60 +392,163 @@ public class Main extends JFrame {
         return panel;
     }
 
+    /**
+     * Format card cost for display
+     */
+    private String formatCost(ArrayList<ChipType> cost) {
+        EnumMap<ChipType, Integer> counts = new EnumMap<>(ChipType.class);
+        for (ChipType type : ChipType.values()) {
+            counts.put(type, 0);
+        }
+        for (ChipType chip : cost) {
+            counts.put(chip, counts.get(chip) + 1);
+        }
+
+        StringBuilder sb = new StringBuilder();
+        for (ChipType type : ChipType.values()) {
+            int count = counts.get(type);
+            if (count > 0) {
+                if (sb.length() > 0) sb.append(" ");
+                sb.append(type.toString().charAt(0)).append(count);
+            }
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Update player info display
+     */
     private void updatePlayerInfo(JTextArea area, Player player, String title, boolean isCurrent) {
         area.setText(title + (isCurrent ? "  ← TURN\n" : "\n"));
-        area.append("Victory Points: " + calculatePoints(player) + "\n");
-        area.append("Chips:\n");
-
-        EnumMap<ChipType, Integer> chipCount = new EnumMap<>(ChipType.class);
-        for (ChipType chip : ChipType.values()) chipCount.put(chip, 0);
+        area.append("Victory Points: " + player.getVictoryPoints() + "\n");
+        area.append("Cards Bought: " + player.getCards().size() + "\n");
+        area.append("\nChips:\n");
 
         EnumMap<ChipType, Integer> chips = player.getChips();
         for (ChipType chip : ChipType.values()) {
-            chipCount.put(chip, chips.getOrDefault(chip, 0));
+            area.append("  " + chip + ": " + chips.get(chip) + "\n");
         }
 
-        chipCount.forEach((k, v) -> area.append("  " + k + ": " + v + "\n"));
         area.setBackground(isCurrent ? new Color(220, 255, 220) : Color.WHITE);
     }
 
-    private int calculatePoints(Player player) {
-        return player.getCards().stream().mapToInt(c -> c.pointValue).sum();
-    }
-
+    /**
+     * Update leaderboard display
+     */
     private void updateLeaderboardUI() {
+        LeaderboardState lb = gameController.getLeaderboardState();
         StringBuilder sb = new StringBuilder();
-        sb.append("HISTORIC LEADERBOARD\n\n");
+        sb.append("═══ LEADERBOARD ═══\n\n");
 
-        java.util.LinkedHashSet<String> names = new java.util.LinkedHashSet<>();
-        if (players != null) {
-            names.add(players[0].getName());
-            names.add(players[1].getName());
+        // Show top 5 games
+        if (!lb.records.isEmpty()) {
+            sb.append("TOP SCORES:\n");
+            for (int i = 0; i < Math.min(5, lb.records.size()); i++) {
+                GameRecord rec = lb.records.get(i);
+                String winner = rec.winnerIndex == 0 ? rec.player1Name :
+                        rec.winnerIndex == 1 ? rec.player2Name : "TIE";
+                sb.append((i + 1)).append(". ").append(winner)
+                        .append(" - ").append(rec.winnerVP).append(" VP")
+                        .append(" (margin: ").append(rec.margin).append(")\n");
+            }
+            sb.append("\n");
         }
-        names.addAll(leaderboard.wins.keySet());
-        names.addAll(leaderboard.bestVP.keySet());
 
-        for (String name : names) {
-            int wins = leaderboard.wins.getOrDefault(name, 0);
-            int best = leaderboard.bestVP.getOrDefault(name, 0);
+        // Show player stats
+        sb.append("PLAYER STATS:\n");
+        java.util.Set<String> allPlayers = new java.util.HashSet<>();
+        allPlayers.addAll(lb.wins.keySet());
+        allPlayers.addAll(lb.bestVP.keySet());
 
+        for (String name : allPlayers) {
+            int wins = lb.wins.getOrDefault(name, 0);
+            int best = lb.bestVP.getOrDefault(name, 0);
             sb.append(name)
-                    .append(" | Wins: ").append(wins)
-                    .append(" | Best VP: ").append(best)
-                    .append("\n");
+                    .append("\n  Wins: ").append(wins)
+                    .append(" | Best: ").append(best).append(" VP\n");
         }
 
         leaderboardArea.setText(sb.toString());
     }
 
+    /**
+     * Show leaderboard in dialog
+     */
     private void showLeaderboardDialog() {
-        updateLeaderboardUI(); 
+        LeaderboardState lb = gameController.getLeaderboardState();
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("═══════════════════════════════\n");
+        sb.append("     MINI-SPLENDOR LEADERBOARD\n");
+        sb.append("═══════════════════════════════\n\n");
+
+        if (lb.records.isEmpty()) {
+            sb.append("No games recorded yet.\n");
+        } else {
+            sb.append("TOP 5 GAMES:\n");
+            sb.append("───────────────────────────────\n");
+            for (int i = 0; i < Math.min(5, lb.records.size()); i++) {
+                GameRecord rec = lb.records.get(i);
+                String winner = rec.winnerIndex == 0 ? rec.player1Name :
+                        rec.winnerIndex == 1 ? rec.player2Name : "TIE";
+
+                sb.append(String.format("#%d: %s - %d VP (Margin: %d)\n",
+                        i + 1, winner, rec.winnerVP, rec.margin));
+                sb.append("    " + rec.player1Name + " (" + rec.p1VP + ") vs " +
+                        rec.player2Name + " (" + rec.p2VP + ")\n");
+                sb.append("    " + rec.analysisText + "\n\n");
+            }
+
+            sb.append("\nALL-TIME PLAYER STATS:\n");
+            sb.append("───────────────────────────────\n");
+            java.util.Set<String> allPlayers = new java.util.HashSet<>();
+            allPlayers.addAll(lb.wins.keySet());
+            allPlayers.addAll(lb.bestVP.keySet());
+
+            for (String name : allPlayers) {
+                int wins = lb.wins.getOrDefault(name, 0);
+                int best = lb.bestVP.getOrDefault(name, 0);
+                sb.append(String.format("%-15s Wins: %2d | Best VP: %2d\n",
+                        name, wins, best));
+            }
+        }
+
+        JTextArea textArea = new JTextArea(sb.toString());
+        textArea.setEditable(false);
+        textArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
+
+        JScrollPane scrollPane = new JScrollPane(textArea);
+        scrollPane.setPreferredSize(new Dimension(500, 400));
+
         JOptionPane.showMessageDialog(
                 this,
-                new JScrollPane(leaderboardArea),
+                scrollPane,
                 "Leaderboard",
                 JOptionPane.INFORMATION_MESSAGE
         );
+    }
+
+    /**
+     * Show error message
+     */
+    private void showError(String message) {
+        JOptionPane.showMessageDialog(
+                this,
+                message,
+                "Error",
+                JOptionPane.WARNING_MESSAGE
+        );
+    }
+
+    /**
+     * Show informational message
+     */
+    private void showMessage(String message) {
+        String originalText = turnIndicator.getText();
+        turnIndicator.setText(message);
+        Timer timer = new Timer(2000, e -> turnIndicator.setText(originalText));
+        timer.setRepeats(false);
+        timer.start();
     }
 
     public static void main(String[] args) {
